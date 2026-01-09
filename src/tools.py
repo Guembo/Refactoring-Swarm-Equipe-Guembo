@@ -41,3 +41,32 @@ def _validate_path(file_path: str) -> Path:
         ) from e
 
 
+def read_file(file_path: str) -> str:
+    """
+    Safely reads text from a file within the sandbox.
+    
+    Args:
+        file_path (str): Path to the file to read.
+    
+    Returns:
+        str: Content of the file.
+    
+    Raises:
+        ValueError: If the path is outside the sandbox.
+        FileNotFoundError: If the file does not exist.
+        IOError: If there's an error reading the file.
+    """
+    validated_path = _validate_path(file_path)
+    
+    if not validated_path.exists():
+        raise FileNotFoundError(f"❌ File not found: {validated_path}")
+    
+    if not validated_path.is_file():
+        raise ValueError(f"❌ Path is not a file: {validated_path}")
+    
+    try:
+        with open(validated_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return content
+    except Exception as e:
+        raise IOError(f"❌ Error reading file '{validated_path}': {str(e)}") from e
