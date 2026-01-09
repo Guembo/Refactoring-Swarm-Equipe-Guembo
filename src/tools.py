@@ -35,7 +35,7 @@ def _validate_path(file_path: str) -> Path:
         abs_path.relative_to(SANDBOX_DIR)
         
         return abs_path
-    except (ValueError, RuntimeError) as e:
+    except ValueError as e:
         raise ValueError(
             f"❌ Security Error: Path '{file_path}' is outside the allowed sandbox directory '{SANDBOX_DIR}'"
         ) from e
