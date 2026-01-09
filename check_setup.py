@@ -1,7 +1,7 @@
 # check_setup.py
 import sys
 import os
-
+sys.stdout.reconfigure(encoding='utf-8')
 def check_environment():
     print("🔍 Démarrage du 'Sanity Check'...\n")
     all_good = True
