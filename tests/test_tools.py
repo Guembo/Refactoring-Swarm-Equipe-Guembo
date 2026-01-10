@@ -3,7 +3,9 @@ from pathlib import Path
 import src.tools
 
 from src.tools import _validate_path
+from unittest.mock import patch
 
+from src.tools import read_file
 
 def test_validate_path_inside_sandbox(tmp_path, monkeypatch):
     sandbox = tmp_path / "sandbox"
@@ -62,3 +64,50 @@ def test_validate_path_symlink_escape(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError):
         _validate_path(str(symlink))
+
+
+
+def test_read_file_success(tmp_path):
+    # create a real file
+    file = tmp_path / "test.txt"
+    file.write_text("hello world", encoding="utf-8")
+
+    # mock validation to return this file
+    with patch("src.tools._validate_path", return_value=file):
+        content = read_file("test.txt")
+
+    assert content == "hello world"
+
+
+def test_read_file_not_found(tmp_path):
+    file = tmp_path / "missing.txt"  # not created
+
+    with patch("src.tools._validate_path", return_value=file):
+        with pytest.raises(FileNotFoundError) as exc:
+            read_file("missing.txt")
+
+    assert "File not found" in str(exc.value)
+
+
+def test_read_file_not_a_file(tmp_path):
+    directory = tmp_path / "dir"
+    directory.mkdir()
+
+    with patch("src.tools._validate_path", return_value=directory):
+        with pytest.raises(ValueError) as exc:
+            read_file("dir")
+
+    assert "Path is not a file" in str(exc.value)
+
+
+
+def test_read_file_io_error(tmp_path):
+    file = tmp_path / "test.txt"
+    file.write_text("data", encoding="utf-8")
+
+    with patch("src.tools._validate_path", return_value=file):
+        with patch("builtins.open", side_effect=OSError("boom")):
+            with pytest.raises(IOError) as exc:
+                read_file("test.txt")
+
+    assert "Error reading file" in str(exc.value)
