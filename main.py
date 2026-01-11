@@ -1,6 +1,7 @@
 import argparse
 import sys
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
 from src.state import AgentState
@@ -46,14 +47,14 @@ def build_graph() -> StateGraph:
     workflow.add_node("fixer", fixer_node)
     workflow.add_node("judge", judge_node)
     
-    # Set entry point
+    
     workflow.set_entry_point("auditor")
     
-    # Add edges
+    
     workflow.add_edge("auditor", "fixer")
     workflow.add_edge("fixer", "judge")
     
-    # Add conditional edge from judge
+    
     workflow.add_conditional_edges(
         "judge",
         should_continue,
@@ -65,6 +66,26 @@ def build_graph() -> StateGraph:
     
     # Compile the graph
     return workflow.compile()
+
+
+def find_python_files(target_dir: str) -> list[str]:
+    """
+    Finds all Python files in the target directory.
+    
+    Args:
+        target_dir: Directory to search
+    
+    Returns:
+        List of Python file names (not full paths)
+    """
+    target_path = Path(target_dir)
+    python_files = []
+    
+    for file in target_path.glob("*.py"):
+        if file.is_file():
+            python_files.append(file.name)
+    
+    return python_files
 
 
 def main():
@@ -102,7 +123,7 @@ def main():
     print("🔄 Self-Healing: Max 10 iterations per file")
     print("="*70 + "\n")
     
-    # Build the graph (Sanity Check)
+    # Build the graph 
     print("🔨 Building LangGraph workflow...")
     try:
         graph = build_graph()
@@ -111,7 +132,19 @@ def main():
         print(f"❌ Graph compilation failed: {e}")
         sys.exit(1)
 
-    print("\n⏳ PENDING: File discovery and execution loop to be implemented.")
+    # Find Python files 
+    python_files = find_python_files(args.target_dir)
+    
+    if not python_files:
+        print(f"⚠️ No Python files found in {args.target_dir}")
+        sys.exit(0)
+    
+    print(f"📝 Found {len(python_files)} Python file(s):")
+    for file in python_files:
+        print(f"   - {file}")
+    print()
+
+    print("⏳ PENDING: Agent execution loop implementation.")
 
 
 if __name__ == "__main__":
