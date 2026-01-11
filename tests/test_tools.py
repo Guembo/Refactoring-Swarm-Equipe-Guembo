@@ -287,3 +287,24 @@ def test_run_pylint_generic_exception(tmp_path):
 
     assert "❌ Error running pylint" in result
     assert "Unexpected crash" in result
+
+
+def test_run_pylint_not_a_file(tmp_path):
+    """Test that run_pylint handles directories appropriately."""
+    # Setup: Create a directory instead of a file
+    target_dir = tmp_path / "my_directory"
+    target_dir.mkdir()
+
+    # Mock validation to return the directory path
+    with patch("src.tools._validate_path", return_value=target_dir):
+        # Mock subprocess to simulate pylint's behavior on a directory
+        mock_process = MagicMock()
+        mock_process.stdout = "pylint output on directory"
+        mock_process.stderr = ""
+        
+        with patch("subprocess.run", return_value=mock_process):
+            result = run_pylint("my_directory")
+
+    # Verify that the function still executes (current behavior)
+    # Note: This documents current behavior where directories are passed to pylint
+    assert "pylint output on directory" in result
