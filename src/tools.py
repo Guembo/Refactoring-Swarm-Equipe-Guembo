@@ -70,3 +70,28 @@ def read_file(file_path: str) -> str:
         return content
     except Exception as e:
         raise IOError(f"❌ Error reading file '{validated_path}': {str(e)}") from e
+
+def write_file(file_path: str, content: str) -> None:
+    """
+    Overwrites a file in the sandbox with the given content.
+    Creates parent directories if they don't exist.
+    
+    Args:
+        file_path (str): Path to the file to write.
+        content (str): Content to write to the file.
+    
+    Raises:
+        ValueError: If the path is outside the sandbox.
+        IOError: If there's an error writing the file.
+    """
+    validated_path = _validate_path(file_path)
+    
+    try:
+        # Create parent directories if they don't exist
+        validated_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(validated_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+    except Exception as e:
+        raise IOError(f"❌ Error writing to file '{validated_path}': {str(e)}") from e
+
