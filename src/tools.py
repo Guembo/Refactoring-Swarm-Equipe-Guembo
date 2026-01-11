@@ -95,3 +95,43 @@ def write_file(file_path: str, content: str) -> None:
     except Exception as e:
         raise IOError(f"❌ Error writing to file '{validated_path}': {str(e)}") from e
 
+
+def run_pylint(file_path: str) -> str:
+    """
+    Runs pylint on the specified file and returns the output.
+    
+    Args:
+        file_path (str): Path to the Python file to lint.
+    
+    Returns:
+        str: Pylint output containing score and error messages.
+    """
+    validated_path = _validate_path(file_path)
+    
+    if not validated_path.exists():
+        return f"❌ Error: File not found: {validated_path}"
+    
+    try:
+        # Use the current virtual environment's Python executable
+        # Run pylint as a module to ensure we use the venv's pylint
+        result = subprocess.run(
+            [sys.executable, '-m', 'pylint', str(validated_path)],
+            capture_output=True,
+            text=True,
+            timeout=60  # 60 second timeout
+        )
+        
+        # Combine stdout and stderr for complete output
+        output = result.stdout
+        if result.stderr:
+            output += f"\n--- STDERR ---\n{result.stderr}"
+        
+        return output if output.strip() else "✅ Pylint completed with no output."
+        
+    except subprocess.TimeoutExpired:
+        return "❌ Error: Pylint execution timed out (60s limit)."
+    except FileNotFoundError:
+        return "❌ Error: pylint is not installed. Run: pip install pylint"
+    except Exception as e:
+        return f"❌ Error running pylint: {str(e)}"
+
