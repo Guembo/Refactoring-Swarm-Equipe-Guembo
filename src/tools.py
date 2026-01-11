@@ -73,7 +73,7 @@ def read_file(file_path: str) -> str:
 
 def write_file(file_path: str, content: str) -> None:
     """
-    Overwrites a file in the sandbox with the given content.
+    Writes content to a file in the sandbox, creating it if it doesn't exist or overwriting it if it does.
     Creates parent directories if they don't exist.
     
     Args:
