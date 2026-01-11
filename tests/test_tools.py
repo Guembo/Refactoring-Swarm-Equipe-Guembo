@@ -7,10 +7,7 @@ import src.tools
 from unittest.mock import patch, MagicMock
 
 
-from src.tools import _validate_path
-from src.tools import read_file
-from src.tools import write_file
-from src.tools import run_pylint
+from src.tools import _validate_path, read_file, write_file, run_pylint
 
 def test_validate_path_inside_sandbox(tmp_path, monkeypatch):
     sandbox = tmp_path / "sandbox"
