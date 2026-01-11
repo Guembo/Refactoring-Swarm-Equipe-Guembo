@@ -116,7 +116,6 @@ def test_read_file_io_error(tmp_path):
                 read_file("test.txt")
 
     assert "Error reading file" in str(exc.value)
-    
 def test_write_file_success(tmp_path):
     # Setup: Define target file in tmp_path
     target_file = tmp_path / "output.txt"
