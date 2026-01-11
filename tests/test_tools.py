@@ -195,17 +195,17 @@ def test_run_pylint_success(tmp_path):
             result = run_pylint("script.py")
 
             # Assert subprocess was called correctly
+            # Updated to include check=False
             mock_run.assert_called_once_with(
                 [sys.executable, '-m', 'pylint', str(target_file)],
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=60,
+                check=False  # <--- This was missing in the previous test
             )
 
     # Assert output matches stdout
     assert "rated at 10.00/10" in result
-
-
 def test_run_pylint_file_not_found_check(tmp_path):
     # Setup: Define a path that DOES NOT exist
     missing_file = tmp_path / "ghost.py"
