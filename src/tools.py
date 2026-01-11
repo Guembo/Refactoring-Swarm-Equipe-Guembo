@@ -118,7 +118,8 @@ def run_pylint(file_path: str) -> str:
             [sys.executable, '-m', 'pylint', str(validated_path)],
             capture_output=True,
             text=True,
-            timeout=60  # 60 second timeout
+            timeout=60,  # 60 second timeout
+            check=False,
         )
         
         # Combine stdout and stderr for complete output
