@@ -70,3 +70,69 @@ def read_file(file_path: str) -> str:
         return content
     except Exception as e:
         raise IOError(f"❌ Error reading file '{validated_path}': {str(e)}") from e
+
+def write_file(file_path: str, content: str) -> None:
+    """
+    Writes content to a file in the sandbox, creating it if it doesn't exist or overwriting it if it does.
+    Creates parent directories if they don't exist.
+    
+    Args:
+        file_path (str): Path to the file to write.
+        content (str): Content to write to the file.
+    
+    Raises:
+        ValueError: If the path is outside the sandbox.
+        IOError: If there's an error writing the file.
+    """
+    validated_path = _validate_path(file_path)
+    
+    try:
+        # Create parent directories if they don't exist
+        validated_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(validated_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+    except Exception as e:
+        raise IOError(f"❌ Error writing to file '{validated_path}': {str(e)}") from e
+
+
+def run_pylint(file_path: str) -> str:
+    """
+    Runs pylint on the specified file and returns the output.
+    
+    Args:
+        file_path (str): Path to the Python file to lint.
+    
+    Returns:
+        str: Pylint output containing score and error messages.
+    """
+    validated_path = _validate_path(file_path)
+    
+    if not validated_path.exists():
+        return f"❌ Error: File not found: {validated_path}"
+    
+    try:
+        # Use the current virtual environment's Python executable
+        # Run pylint as a module to ensure we use the venv's pylint
+        result = subprocess.run(
+            [sys.executable, '-m', 'pylint', str(validated_path)],
+            capture_output=True,
+            text=True,
+            timeout=60,  # 60 second timeout
+            check=False,
+        )
+        
+        # Combine stdout and stderr for complete output
+        output = result.stdout
+        if result.stderr:
+            output += f"\n--- STDERR ---\n{result.stderr}"
+        
+        return output if output.strip() else "✅ Pylint completed with no output."
+        
+    except subprocess.TimeoutExpired:
+        return "❌ Error: Pylint execution timed out (60s limit)."
+    except FileNotFoundError:
+        return "❌ Error: pylint is not installed. Run: pip install pylint"
+    except Exception as e:
+        return f"❌ Error running pylint: {str(e)}"
+
