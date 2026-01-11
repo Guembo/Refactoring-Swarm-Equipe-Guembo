@@ -1,12 +1,16 @@
+import sys
 import pytest
+import subprocess
 from pathlib import Path
 import src.tools
 
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
+
 
 from src.tools import _validate_path
 from src.tools import read_file
 from src.tools import write_file
+from src.tools import run_pylint
 
 def test_validate_path_inside_sandbox(tmp_path, monkeypatch):
     sandbox = tmp_path / "sandbox"
@@ -178,3 +182,112 @@ def test_write_file_io_error(tmp_path):
     # Assert custom error message formatting
     assert "❌ Error writing to file" in str(exc.value)
     assert "Permission denied" in str(exc.value)
+def test_run_pylint_success(tmp_path):
+    # Setup: Create a dummy python file
+    target_file = tmp_path / "script.py"
+    target_file.touch()
+
+    # Setup: Mock the subprocess result
+    mock_process = MagicMock()
+    mock_process.stdout = "Your code has been rated at 10.00/10"
+    mock_process.stderr = ""
+
+    # Mock validation to return the real path
+    with patch("src.tools._validate_path", return_value=target_file):
+        # Mock subprocess to avoid actually running pylint
+        with patch("subprocess.run", return_value=mock_process) as mock_run:
+            result = run_pylint("script.py")
+
+            # Assert subprocess was called correctly
+            mock_run.assert_called_once_with(
+                [sys.executable, '-m', 'pylint', str(target_file)],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+
+    # Assert output matches stdout
+    assert "rated at 10.00/10" in result
+
+
+def test_run_pylint_file_not_found_check(tmp_path):
+    # Setup: Define a path that DOES NOT exist
+    missing_file = tmp_path / "ghost.py"
+
+    # Mock validation to return the non-existent path
+    with patch("src.tools._validate_path", return_value=missing_file):
+        # We don't need to patch subprocess because the function returns early
+        result = run_pylint("ghost.py")
+
+    assert "❌ Error: File not found" in result
+    assert str(missing_file) in result
+
+
+def test_run_pylint_with_stderr_output(tmp_path):
+    target_file = tmp_path / "script.py"
+    target_file.touch()
+
+    mock_process = MagicMock()
+    mock_process.stdout = "Standard output"
+    mock_process.stderr = "Import error warning"
+
+    with patch("src.tools._validate_path", return_value=target_file):
+        with patch("subprocess.run", return_value=mock_process):
+            result = run_pylint("script.py")
+
+    # Assert both outputs are combined
+    assert "Standard output" in result
+    assert "--- STDERR ---" in result
+    assert "Import error warning" in result
+
+
+def test_run_pylint_timeout(tmp_path):
+    target_file = tmp_path / "script.py"
+    target_file.touch()
+
+    with patch("src.tools._validate_path", return_value=target_file):
+        # Simulate a timeout exception
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="pylint", timeout=60)):
+            result = run_pylint("script.py")
+
+    assert "❌ Error: Pylint execution timed out" in result
+
+
+def test_run_pylint_not_installed(tmp_path):
+    target_file = tmp_path / "script.py"
+    target_file.touch()
+
+    with patch("src.tools._validate_path", return_value=target_file):
+        # Simulate the executable not being found
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            result = run_pylint("script.py")
+
+    assert "❌ Error: pylint is not installed" in result
+
+
+def test_run_pylint_empty_output(tmp_path):
+    target_file = tmp_path / "script.py"
+    target_file.touch()
+
+    mock_process = MagicMock()
+    mock_process.stdout = ""  # Empty stdout
+    mock_process.stderr = ""  # Empty stderr
+
+    with patch("src.tools._validate_path", return_value=target_file):
+        with patch("subprocess.run", return_value=mock_process):
+            result = run_pylint("script.py")
+
+    # Should return the default success message
+    assert "✅ Pylint completed with no output" in result
+
+
+def test_run_pylint_generic_exception(tmp_path):
+    target_file = tmp_path / "script.py"
+    target_file.touch()
+
+    with patch("src.tools._validate_path", return_value=target_file):
+        with patch("subprocess.run", side_effect=Exception("Unexpected crash")):
+            result = run_pylint("script.py")
+
+    assert "❌ Error running pylint" in result
+    assert "Unexpected crash" in result
