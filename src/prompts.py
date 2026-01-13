@@ -103,3 +103,36 @@ Before providing your solution, mentally verify:
 5. ✓ Previous test failures are addressed (if applicable)
 
 Now provide the complete, production-ready code."""
+
+
+# =============================================================================
+# HELPER: Prompt Construction Functions
+# =============================================================================
+
+def build_auditor_input(code_content: str, pylint_report: str, file_name: str) -> str:
+    """
+    Constructs the full input prompt for the Auditor agent.
+    
+    Args:
+        code_content: The source code to analyze
+        pylint_report: Output from pylint analysis
+        file_name: Name of the file being analyzed
+    
+    Returns:
+        Complete prompt string for the Auditor
+    """
+    prompt = f"""**File:** {file_name}
+
+**Pylint Report:**
+```
+{pylint_report}
+```
+
+**Code to Analyze:**
+```python
+{code_content}
+```
+
+Please provide your structured analysis following the output format specified in your system prompt."""
+    
+    return prompt
