@@ -136,3 +136,47 @@ def run_pylint(file_path: str) -> str:
     except Exception as e:
         return f"❌ Error running pylint: {str(e)}"
 
+def run_pytest(test_path: str) -> str:
+    """
+    Runs pytest on the specified test file or directory and returns the output.
+    
+    Args:
+        test_path (str): Path to the test file or directory.
+    
+    Returns:
+        str: Pytest output containing test results and failure logs.
+    """
+    validated_path = _validate_path(test_path)
+    
+    if not validated_path.exists():
+        return f"❌ Error: Test path not found: {validated_path}"
+    
+    try:
+        # Use the current virtual environment's Python executable
+        # Run pytest as a module with verbose output
+        result = subprocess.run(
+            [sys.executable, '-m', 'pytest', str(validated_path), '-v', '--tb=short'],
+            capture_output=True,
+            text=True,
+            timeout=120  # 120 second timeout for tests
+        )
+        
+        # Combine stdout and stderr for complete output
+        output = result.stdout
+        if result.stderr:
+            output += f"\n--- STDERR ---\n{result.stderr}"
+        
+        # Add return code information
+        if result.returncode == 0:
+            output = f"✅ All tests passed!\n\n{output}"
+        else:
+            output = f"❌ Tests failed (exit code: {result.returncode})\n\n{output}"
+        
+        return output if output.strip() else "⚠️ Pytest completed with no output."
+        
+    except subprocess.TimeoutExpired:
+        return "❌ Error: Pytest execution timed out (120s limit)."
+    except FileNotFoundError:
+        return "❌ Error: pytest is not installed. Run: pip install pytest"
+    except Exception as e:
+        return f"❌ Error running pytest: {str(e)}"
