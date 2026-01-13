@@ -7,7 +7,8 @@ import src.tools
 from unittest.mock import patch, MagicMock
 
 
-from src.tools import _validate_path, read_file, write_file, run_pylint
+from src.tools import _validate_path, read_file, write_file, run_pylint,run_pytest
+
 
 def test_validate_path_inside_sandbox(tmp_path, monkeypatch):
     sandbox = tmp_path / "sandbox"
@@ -308,3 +309,125 @@ def test_run_pylint_not_a_file(tmp_path):
     # Verify that the function still executes (current behavior)
     # Note: This documents current behavior where directories are passed to pylint
     assert "pylint output on directory" in result
+
+def test_run_pytest_success(tmp_path):
+    """Test that valid pytest execution returns success message."""
+    # Setup: Create a dummy test file
+    target_file = tmp_path / "test_app.py"
+    target_file.touch()
+
+    # Setup: Mock the subprocess result (Success case)
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.stdout = "collected 2 items\n.. passed"
+    mock_process.stderr = ""
+
+    with patch("src.tools._validate_path", return_value=target_file):
+        with patch("subprocess.run", return_value=mock_process) as mock_run:
+            result = run_pytest("test_app.py")
+
+            # Assert subprocess arguments (including specific flags -v and --tb=short)
+            mock_run.assert_called_once_with(
+                [sys.executable, '-m', 'pytest', str(target_file), '-v', '--tb=short'],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
+    assert "✅ All tests passed!" in result
+    assert "collected 2 items" in result
+
+
+def test_run_pytest_tests_failed(tmp_path):
+    """Test that failed tests return the correct failure formatting."""
+    target_file = tmp_path / "test_app.py"
+    target_file.touch()
+
+    # Setup: Mock failure (returncode 1 is standard for pytest failures)
+    mock_process = MagicMock()
+    mock_process.returncode = 1
+    mock_process.stdout = "AssertionError: 1 != 2"
+    mock_process.stderr = ""
+
+    with patch("src.tools._validate_path", return_value=target_file):
+        with patch("subprocess.run", return_value=mock_process):
+            result = run_pytest("test_app.py")
+
+    assert "❌ Tests failed (exit code: 1)" in result
+    assert "AssertionError" in result
+
+
+def test_run_pytest_path_not_found(tmp_path):
+    """Test that a non-existent path checks trigger an error before execution."""
+    # Setup: Path that definitely doesn't exist
+    missing_path = tmp_path / "ghost_tests.py"
+
+    with patch("src.tools._validate_path", return_value=missing_path):
+        # We don't patch subprocess here because it shouldn't be reached
+        result = run_pytest("ghost_tests.py")
+
+    assert "❌ Error: Test path not found" in result
+    assert str(missing_path) in result
+
+
+def test_run_pytest_timeout(tmp_path):
+    """Test handling of the 120s timeout."""
+    target_file = tmp_path / "test_slow.py"
+    target_file.touch()
+
+    with patch("src.tools._validate_path", return_value=target_file):
+        # Simulate execution taking longer than 120s
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="pytest", timeout=120)):
+            result = run_pytest("test_slow.py")
+
+    assert "❌ Error: Pytest execution timed out" in result
+
+
+def test_run_pytest_not_installed(tmp_path):
+    """Test the case where pytest is not in the environment."""
+    target_file = tmp_path / "test_app.py"
+    target_file.touch()
+
+    with patch("src.tools._validate_path", return_value=target_file):
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            result = run_pytest("test_app.py")
+
+    assert "❌ Error: pytest is not installed" in result
+
+
+def test_run_pytest_stderr_capture(tmp_path):
+    """Test that STDERR is captured and appended if present."""
+    target_file = tmp_path / "test_app.py"
+    target_file.touch()
+
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.stdout = "Tests passed"
+    mock_process.stderr = "DeprecationWarning: something is old"
+
+    with patch("src.tools._validate_path", return_value=target_file):
+        with patch("subprocess.run", return_value=mock_process):
+            result = run_pytest("test_app.py")
+
+    assert "Tests passed" in result
+    assert "--- STDERR ---" in result
+    assert "DeprecationWarning" in result
+
+
+def test_run_pytest_empty_output(tmp_path):
+    """Test handling of empty stdout from subprocess."""
+    target_file = tmp_path / "test_app.py"
+    target_file.touch()
+
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.stdout = ""
+    mock_process.stderr = ""
+
+    with patch("src.tools._validate_path", return_value=target_file):
+        with patch("subprocess.run", return_value=mock_process):
+            result = run_pytest("test_app.py")
+
+    # Since returncode is 0, the function will assume success and prepend the header
+    # effectively making the "no output" warning unreachable in the current code.
+    assert "✅ All tests passed!" in result
