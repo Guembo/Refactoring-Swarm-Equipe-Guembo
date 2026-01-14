@@ -303,6 +303,80 @@ def fixer_node(state: AgentState) -> AgentState:
 # =============================================================================
 
 def judge_node(state: AgentState) -> AgentState:
-    """Judge Agent Stub"""
-    print("Judge node not implemented yet")
+    """
+    Judge Agent: Validates the fixed code using pytest and pylint.
+    
+    Workflow:
+    1. Run pytest on the corresponding test file
+    2. Run pylint on the fixed code
+    3. Analyze results to determine success/failure
+    4. Log the validation (ActionType.DEBUG)
+    5. Update status accordingly
+    
+    Args:
+        state: Current agent state
+    
+    Returns:
+        Updated state with test_results, pylint_report, and status
+    """
+    print(f"\n{'='*60}")
+    print(f"⚖️ JUDGE: Validating fixes for {state['file_name']}")
+    print(f"{'='*60}\n")
+    
+    file_path = os.path.join(state['target_dir'], state['file_name'])
+    
+    # Run pytest (assuming test file follows naming convention)
+    test_file_name = state['file_name'].replace('.py', '_test.py')
+    if not test_file_name.startswith('test_'):
+        test_file_name = 'test_' + state['file_name']
+    
+    test_path = os.path.join(state['target_dir'], test_file_name)
+    
+    print(f"🧪 Running pytest on {test_file_name}...")
+    test_results = tools.run_pytest(test_path)
+    state['test_results'] = test_results
+    
+    # Run pylint
+    print(f"📊 Running pylint on {state['file_name']}...")
+    pylint_report = tools.run_pylint(file_path)
+    state['pylint_report'] = pylint_report
+    
+    # Analyze results
+    tests_passed = "✅ All tests passed!" in test_results or "passed" in test_results.lower()
+    pylint_score = _extract_pylint_score(pylint_report)
+    
+    # Determine success (tests pass + reasonable pylint score)
+    if tests_passed and (pylint_score is None or pylint_score >= 7.0):
+        state['status'] = "SUCCESS"
+        verdict = "SUCCESS"
+        print("✅ VERDICT: All tests passed and code quality is acceptable!")
+    else:
+        state['status'] = "FAILED"
+        verdict = "FAILED"
+        if not tests_passed:
+            print("❌ VERDICT: Tests failed")
+        else:
+            print(f"⚠️ VERDICT: Pylint score too low ({pylint_score}/10)")
+    
+    # Log the validation (MANDATORY)
+    log_experiment(
+        agent_name="Judge",
+        model_used="gemini-2.5-flash-lite",  # Judge doesn't call LLM but we log for consistency
+        action=ActionType.DEBUG,
+        details={
+            "input_prompt": f"Validating {state['file_name']} at iteration {state['iteration']}",
+            "output_response": f"Tests passed: {tests_passed}, Pylint score: {pylint_score}",
+            "test_results": test_results,
+            "pylint_report": pylint_report,
+            "file_validated": state['file_name'],
+            "iteration": state['iteration'],
+            "tests_passed": tests_passed,
+            "pylint_score": pylint_score
+        },
+        status=verdict
+    )
+    
+    print(f"\n{'='*60}\n")
+    
     return state
+
