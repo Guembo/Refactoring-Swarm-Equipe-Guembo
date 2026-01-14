@@ -1,3 +1,10 @@
+"""
+Refactoring Swarm - Main Orchestrator
+Multi-agent system using LangGraph to automatically fix buggy Python code.
+
+Architecture: Auditor -> Fixer -> Judge (with self-healing loop)
+"""
+
 import argparse
 import sys
 import os
@@ -15,6 +22,16 @@ load_dotenv()
 def should_continue(state: AgentState) -> str:
     """
     Conditional routing logic for the Judge node.
+    
+    Determines whether to:
+    - END (success or max iterations reached)
+    - Loop back to Fixer (for another attempt)
+    
+    Args:
+        state: Current agent state
+    
+    Returns:
+        "end" or "continue" (routing decision)
     """
     # Success case - all tests passed
     if state['status'] == "SUCCESS":
@@ -35,6 +52,16 @@ def should_continue(state: AgentState) -> str:
 def build_graph() -> StateGraph:
     """
     Builds the LangGraph workflow for the Refactoring Swarm.
+    
+    Graph Structure:
+        START -> auditor -> fixer -> judge -> [conditional]
+                                       ^         |
+                                       |         v
+                                       +---- (continue)
+                                             (end) -> END
+    
+    Returns:
+        Compiled StateGraph
     """
     # Initialize the graph
     workflow = StateGraph(AgentState)
@@ -68,6 +95,12 @@ def build_graph() -> StateGraph:
 def find_python_files(target_dir: str) -> list[str]:
     """
     Finds all Python files in the target directory.
+    
+    Args:
+        target_dir: Directory to search
+    
+    Returns:
+        List of Python file names (not full paths)
     """
     target_path = Path(target_dir)
     python_files = []
@@ -82,6 +115,14 @@ def find_python_files(target_dir: str) -> list[str]:
 def main():
     """
     Main orchestration function for the Refactoring Swarm.
+    
+    Workflow:
+    1. Parse command-line arguments
+    2. Validate target directory
+    3. Find all Python files
+    4. Build the LangGraph
+    5. Execute the graph for each file
+    6. Report results
     """
     # Parse arguments
     parser = argparse.ArgumentParser(
@@ -131,7 +172,7 @@ def main():
     graph = build_graph()
     print("✅ Graph compiled successfully!\n")
     
-    # Process each file (ADDED IN THIS COMMIT)
+    # Process each file
     results = []
     for i, file_name in enumerate(python_files, 1):
         print(f"\n{'#'*70}")
@@ -166,9 +207,26 @@ def main():
                 "iterations": 0,
                 "error": str(e)
             })
-
-    # Summary reporting will be added in the final commit...
-    print("\n✅ Batch execution complete.")
+    
+    # Print final summary
+    print("\n" + "="*70)
+    print("📊 FINAL RESULTS")
+    print("="*70)
+    
+    success_count = sum(1 for r in results if r["status"] == "SUCCESS")
+    failed_count = sum(1 for r in results if r["status"] in ["FAILED", "ERROR"])
+    
+    for result in results:
+        status_emoji = "✅" if result["status"] == "SUCCESS" else "❌"
+        print(f"{status_emoji} {result['file']}: {result['status']} "
+              f"(Iterations: {result['iterations']})")
+    
+    print("\n" + "="*70)
+    print(f"✅ Success: {success_count}/{len(python_files)}")
+    print(f"❌ Failed:  {failed_count}/{len(python_files)}")
+    print("="*70)
+    print("\n🔬 Check logs/experiment_data.json for detailed LLM interaction logs.")
+    print("\n✨ REFACTORING SWARM COMPLETE!\n")
 
 
 if __name__ == "__main__":
