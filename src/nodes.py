@@ -39,7 +39,7 @@ def get_llm(temperature: float = 0.3):
         )
     
     return ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash-lite",
+        model="gemini-2.5-flash",
         temperature=temperature,
         google_api_key=api_key,
         convert_system_message_to_human=True
@@ -265,9 +265,16 @@ def fixer_node(state: AgentState) -> AgentState:
         )
         
         # Write the fixed code to file
-        file_path = os.path.join(state['target_dir'], state['file_name'])
-        print(f"💾 Writing fixed code to {state['file_name']}...")
-        tools.write_file(file_path, fixed_code)
+        project_root = os.path.dirname(state['target_dir'])
+        sandbox_dir = os.path.join(project_root, 'sandbox')
+        fixed_filename = f"fixed_{state['file_name']}"
+        output_path = os.path.join(sandbox_dir, fixed_filename)
+        
+        print(f"💾 Writing fixed code to sandbox/{fixed_filename}...")
+        tools.write_file(output_path, fixed_code)
+        
+        # Store the sandbox path in state for judge to use
+        state['fixed_file_path'] = output_path
         
         # Update state
         state['code_content'] = fixed_code
@@ -323,7 +330,15 @@ def judge_node(state: AgentState) -> AgentState:
     print(f"⚖️ JUDGE: Validating fixes for {state['file_name']}")
     print(f"{'='*60}\n")
     
-    file_path = os.path.join(state['target_dir'], state['file_name'])
+    # Use the fixed file from sandbox if available (written by fixer)
+    # Otherwise fall back to original location (for initial audit)
+    
+    if 'fixed_file_path' in state and state['fixed_file_path']:
+        file_path = state['fixed_file_path']
+        print(f"📂 Validating fixed file: sandbox/{os.path.basename(file_path)}")
+    else:
+        file_path = os.path.join(state['target_dir'], state['file_name'])
+        print(f"📂 Validating original file: {state['file_name']}")
     
     # Run pytest (assuming test file follows naming convention)
     test_file_name = state['file_name'].replace('.py', '_test.py')
