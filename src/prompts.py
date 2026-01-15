@@ -136,3 +136,59 @@ def build_auditor_input(code_content: str, pylint_report: str, file_name: str) -
 Please provide your structured analysis following the output format specified in your system prompt."""
     
     return prompt
+
+
+def build_fixer_input(
+    code_content: str,
+    refactoring_plan: str,
+    test_results: str,
+    pylint_report: str,
+    iteration: int,
+    file_name: str
+) -> str:
+    """
+    Constructs the full input prompt for the Fixer agent.
+    
+    Args:
+        code_content: The original/current code
+        refactoring_plan: Analysis from the Auditor
+        test_results: Output from pytest
+        pylint_report: Output from pylint
+        iteration: Current iteration number
+        file_name: Name of the file being fixed
+    
+    Returns:
+        Complete prompt string for the Fixer
+    """
+    prompt = f"""**File:** {file_name}
+**Iteration:** {iteration}/10
+
+**Original Code:**
+```python
+{code_content}
+```
+
+**Refactoring Plan from Auditor:**
+{refactoring_plan}
+
+**Pylint Report:**
+```
+{pylint_report}
+```
+"""
+    
+    # Add test results if this is a retry (iteration > 1)
+    if iteration > 1 and test_results:
+        prompt += f"""
+**Previous Test Results (FAILURES TO FIX):**
+```
+{test_results}
+```
+
+⚠️ **IMPORTANT:** This is attempt #{iteration}. The previous fix attempt failed the tests above.
+Carefully analyze the error messages and fix the root cause. Do not repeat the same mistakes.
+"""
+    
+    prompt += "\n\nProvide the COMPLETE corrected code now."
+    
+    return prompt
