@@ -39,7 +39,7 @@ def get_llm(temperature: float = 0.3):
         )
     
     return ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash-lite",
+        model="gemini-2.5-flash",
         temperature=temperature,
         google_api_key=api_key,
         convert_system_message_to_human=True
@@ -265,9 +265,16 @@ def fixer_node(state: AgentState) -> AgentState:
         )
         
         # Write the fixed code to file
-        file_path = os.path.join(state['target_dir'], state['file_name'])
-        print(f"💾 Writing fixed code to {state['file_name']}...")
-        tools.write_file(file_path, fixed_code)
+        project_root = os.path.dirname(state['target_dir'])
+        sandbox_dir = os.path.join(project_root, 'sandbox')
+        fixed_filename = f"fixed_{state['file_name']}"
+        output_path = os.path.join(sandbox_dir, fixed_filename)
+        
+        print(f"💾 Writing fixed code to sandbox/{fixed_filename}...")
+        tools.write_file(output_path, fixed_code)
+        
+        # Store the sandbox path in state for judge to use
+        state['fixed_file_path'] = output_path
         
         # Update state
         state['code_content'] = fixed_code
@@ -322,8 +329,16 @@ def judge_node(state: AgentState) -> AgentState:
     print(f"\n{'='*60}")
     print(f"⚖️ JUDGE: Validating fixes for {state['file_name']}")
     print(f"{'='*60}\n")
-
-    file_path = os.path.join(state['target_dir'], state['file_name'])
+    
+    # Use the fixed file from sandbox if available (written by fixer)
+    # Otherwise fall back to original location (for initial audit)
+    
+    if 'fixed_file_path' in state and state['fixed_file_path']:
+        file_path = state['fixed_file_path']
+        print(f"📂 Validating fixed file: sandbox/{os.path.basename(file_path)}")
+    else:
+        file_path = os.path.join(state['target_dir'], state['file_name'])
+        print(f"📂 Validating original file: {state['file_name']}")
     
     # Run pytest (assuming test file follows naming convention)
     test_file_name = state['file_name'].replace('.py', '_test.py')
@@ -331,22 +346,23 @@ def judge_node(state: AgentState) -> AgentState:
         test_file_name = 'test_' + state['file_name']
     
     test_path = os.path.join(state['target_dir'], test_file_name)
-    # Check if test file exists,
+    
+    # Check if test file exists
     if not os.path.exists(test_path):
-        print(f" Test file not found: {test_file_name}")
-        print(" No unit test file provided - skipping test validation")
-
-        # Run pylint only,
-        print(f" Running pylint on {state['file_name']}...")
+        print(f"⚠️ Test file not found: {test_file_name}")
+        print("ℹ️ No unit test file provided - skipping test validation")
+        
+        # Run pylint only
+        print(f"📊 Running pylint on {state['file_name']}...")
         pylint_report = tools.run_pylint(file_path)
         state['pylint_report'] = pylint_report
         pylint_score = _extract_pylint_score(pylint_report)
-
-        # Exit with SUCCESS since no test file was provided,
+        
+        # Exit with SUCCESS since no test file was provided
         state['status'] = "SUCCESS"
         state['test_results'] = "No test file provided - validation skipped"
-
-        # Log the validation,
+        
+        # Log the validation
         log_experiment(
             agent_name="Judge",
             model_used="gemini-2.5-flash-lite",
@@ -364,10 +380,11 @@ def judge_node(state: AgentState) -> AgentState:
             },
             status="SUCCESS"
         )
-
-        print(" VERDICT: Code refactoring complete (no tests to validate)")
+        
+        print("✅ VERDICT: Code refactoring complete (no tests to validate)")
         print(f"{'='*60}\n")
         return state
+    
     print(f"🧪 Running pytest on {test_file_name}...")
     test_results = tools.run_pytest(test_path)
     state['test_results'] = test_results

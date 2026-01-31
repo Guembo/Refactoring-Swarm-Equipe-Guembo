@@ -20,6 +20,7 @@ class AgentState(TypedDict):
     # Code and analysis
     code_content: str       # Current version of the code being refactored
     refactoring_plan: str   # Auditor's structured analysis and recommendations
+    fixed_file_path: str    # Path to fixed code in sandbox folder (set by fixer)
     
     # Testing and validation results
     test_results: str   # Output from pytest execution
