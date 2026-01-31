@@ -347,6 +347,44 @@ def judge_node(state: AgentState) -> AgentState:
     
     test_path = os.path.join(state['target_dir'], test_file_name)
     
+    # Check if test file exists
+    if not os.path.exists(test_path):
+        print(f"⚠️ Test file not found: {test_file_name}")
+        print("ℹ️ No unit test file provided - skipping test validation")
+        
+        # Run pylint only
+        print(f"📊 Running pylint on {state['file_name']}...")
+        pylint_report = tools.run_pylint(file_path)
+        state['pylint_report'] = pylint_report
+        pylint_score = _extract_pylint_score(pylint_report)
+        
+        # Exit with SUCCESS since no test file was provided
+        state['status'] = "SUCCESS"
+        state['test_results'] = "No test file provided - validation skipped"
+        
+        # Log the validation
+        log_experiment(
+            agent_name="Judge",
+            model_used="gemini-2.5-flash-lite",
+            action=ActionType.DEBUG,
+            details={
+                "input_prompt": f"Validating {state['file_name']} at iteration {state['iteration']}",
+                "output_response": f"No test file found. Pylint score: {pylint_score}",
+                "test_results": "Test file not provided",
+                "pylint_report": pylint_report,
+                "file_validated": state['file_name'],
+                "iteration": state['iteration'],
+                "tests_passed": None,
+                "pylint_score": pylint_score,
+                "note": "Unit test file not provided - exiting with success"
+            },
+            status="SUCCESS"
+        )
+        
+        print("✅ VERDICT: Code refactoring complete (no tests to validate)")
+        print(f"{'='*60}\n")
+        return state
+    
     print(f"🧪 Running pytest on {test_file_name}...")
     test_results = tools.run_pytest(test_path)
     state['test_results'] = test_results
