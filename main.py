@@ -92,26 +92,29 @@ def build_graph() -> StateGraph:
     return workflow.compile()
 
 
+from pathlib import Path
+
+from pathlib import Path
+
 def find_python_files(target_dir: str) -> list[str]:
     """
-    Finds all Python files in the target directory.
+    Finds all Python files recursively in the target directory.
     
     Args:
         target_dir: Directory to search
     
     Returns:
-        List of Python file names (not full paths)
+        List of Python file paths relative to the target directory
     """
     target_path = Path(target_dir)
     python_files = []
     
-    for file in target_path.glob("*.py"):
+    for file in target_path.rglob("*.py"):
         if file.is_file():
-            python_files.append(file.name)
-    
+            relative_path = file.relative_to(target_path)
+            python_files.append(str(relative_path))
+            
     return python_files
-
-
 def main():
     """
     Main orchestration function for the Refactoring Swarm.
