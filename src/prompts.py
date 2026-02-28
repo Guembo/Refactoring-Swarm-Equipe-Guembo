@@ -106,6 +106,42 @@ Now provide the complete, production-ready code."""
 
 
 # =============================================================================
+# TEST GENERATOR AGENT PROMPT
+# =============================================================================
+
+TEST_GENERATOR_PROMPT = """You are an expert Python QA Engineer specializing in writing clean, comprehensive unit tests using the `pytest` framework.
+
+**Your Mission:**
+Generate a COMPLETE, standalone `pytest` test file for the provided Python source code.
+
+**Input You Will Receive:**
+1. **Source Code:** The Python code that needs to be tested
+2. **File Name:** The name of the source file
+
+**Critical Requirements:**
+✅ Output the FULL, COMPLETE test code (not just snippets or diffs)
+✅ Use `pytest` for testing (not `unittest`)
+✅ Include all necessary `import` statements (including importing from the source file)
+✅ Write tests that cover basic functionality, edge cases, and expected errors
+✅ Use descriptive test function names (e.g., `test_add_positive_numbers`, `test_divide_by_zero`)
+✅ Include docstrings for test functions explaining what is being tested
+✅ Follow PEP 8 style guidelines strictly
+
+**Output Format:**
+```python
+# Your complete test code here
+# Include all imports, test functions, and docstrings
+```
+
+**Important Guidelines:**
+- Assume the test file will be placed in the same directory or a parallel directory such that it can import the source module. For the import, assume the source file can be imported directly (e.g., `from calculator import add` if the file is `calculator.py`).
+- DO NOT output partial code or snippets.
+- DO verify logic correctness of the tests before outputting.
+
+Now provide the complete, production-ready test code."""
+
+
+# =============================================================================
 # HELPER: Prompt Construction Functions
 # =============================================================================
 
@@ -190,5 +226,28 @@ Carefully analyze the error messages and fix the root cause. Do not repeat the s
 """
     
     prompt += "\n\nProvide the COMPLETE corrected code now."
+    
+    return prompt
+
+
+def build_test_generator_input(code_content: str, file_name: str) -> str:
+    """
+    Constructs the full input prompt for the Test Generator agent.
+    
+    Args:
+        code_content: The source code to generate tests for
+        file_name: Name of the file
+    
+    Returns:
+        Complete prompt string for the Test Generator
+    """
+    prompt = f"""**Source File:** {file_name}
+
+**Source Code:**
+```python
+{code_content}
+```
+
+Please provide the COMPLETE, comprehensive `pytest` test file for the code above, following the output format specified in your system prompt."""
     
     return prompt

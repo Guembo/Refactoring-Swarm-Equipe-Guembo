@@ -9,9 +9,11 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from src.state import AgentState
 from src.prompts import (
     AUDITOR_PROMPT,
-    FIXER_PROMPT,          # <--- Added
+    FIXER_PROMPT,          
+    TEST_GENERATOR_PROMPT, 
     build_auditor_input,
-    build_fixer_input      # <--- Added
+    build_fixer_input,     
+    build_test_generator_input 
 )
 from src.utils.logger import log_experiment, ActionType
 from src import tools
@@ -351,40 +353,79 @@ def judge_node(state: AgentState) -> AgentState:
     # Check if test file exists
     if not os.path.exists(test_path):
         print(f"⚠️ Test file not found: {test_file_name}")
-        print("ℹ️ No unit test file provided - skipping test validation")
+        print("🤖 Generating missing unit test file...")
         
-        # Run pylint only
-        print(f"📊 Running pylint on {state['file_name']}...")
-        pylint_report = tools.run_pylint(file_path)
-        state['pylint_report'] = pylint_report
-        pylint_score = _extract_pylint_score(pylint_report)
-        
-        # Exit with SUCCESS since no test file was provided
-        state['status'] = "SUCCESS"
-        state['test_results'] = "No test file provided - validation skipped"
-        
-        # Log the validation
-        log_experiment(
-            agent_name="Judge",
-            model_used="gemini-2.5-flash-lite",
-            action=ActionType.DEBUG,
-            details={
-                "input_prompt": f"Validating {state['file_name']} at iteration {state['iteration']}",
-                "output_response": f"No test file found. Pylint score: {pylint_score}",
-                "test_results": "Test file not provided",
-                "pylint_report": pylint_report,
-                "file_validated": state['file_name'],
-                "iteration": state['iteration'],
-                "tests_passed": None,
-                "pylint_score": pylint_score,
-                "note": "Unit test file not provided - exiting with success"
-            },
-            status="SUCCESS"
+        # Build prompt for Test Generator
+        test_gen_prompt = build_test_generator_input(
+            code_content=state['code_content'],
+            file_name=state['file_name']
         )
         
-        print("✅ VERDICT: Code refactoring complete (no tests to validate)")
-        print(f"{'='*60}\n")
-        return state
+        try:
+            llm = get_llm(temperature=0.2)
+            messages = [
+                ("system", TEST_GENERATOR_PROMPT),
+                ("user", test_gen_prompt)
+            ]
+            response = llm.invoke(messages)
+            test_code = _extract_code_from_response(response.content)
+            
+            # Write the generated test code to the sandbox directory
+            project_root = os.path.dirname(state['target_dir'])
+            sandbox_dir = os.path.join(project_root, 'sandbox')
+            test_path = os.path.join(sandbox_dir, test_file_name)
+            
+            print(f"💾 Writing generated test code to sandbox/{test_file_name}...")
+            tools.write_file(test_path, test_code)
+            
+            # Log the test generation interaction
+            log_experiment(
+                agent_name="TestGenerator",
+                model_used="gemini-2.5-flash",
+                action=ActionType.FIX,  # Using FIX type for code generation
+                details={
+                    "input_prompt": test_gen_prompt,
+                    "output_response": response.content,
+                    "file_generated": test_file_name,
+                    "iteration": state['iteration'],
+                    "code_length": len(test_code),
+                    "note": "Automatically generated missing test file"
+                },
+                status="SUCCESS"
+            )
+            print("✅ Test generation complete\n")
+            
+        except Exception as e:
+            error_msg = f"Failed to generate or write test file: {str(e)}"
+            print(f"❌ {error_msg}")
+            
+            # Log the failure
+            log_experiment(
+                agent_name="TestGenerator",
+                model_used="gemini-2.5-flash",
+                action=ActionType.FIX,
+                details={
+                    "input_prompt": test_gen_prompt,
+                    "output_response": error_msg,
+                    "file_generated": test_file_name,
+                    "error": str(e)
+                },
+                status="FAILURE"
+            )
+            
+            # If generation fails, we still fallback to pylint only validation
+            print("ℹ️ Falling back to pylint-only validation")
+            print(f"📊 Running pylint on {state['file_name']}...")
+            pylint_report = tools.run_pylint(file_path)
+            state['pylint_report'] = pylint_report
+            pylint_score = _extract_pylint_score(pylint_report)
+            
+            state['status'] = "SUCCESS"
+            state['test_results'] = "Test generation failed - validation skipped"
+            
+            print("✅ VERDICT: Code refactoring complete (fallback to pylint only)")
+            print(f"{'='*60}\n")
+            return state
     
     print(f"🧪 Running pytest on {test_file_name}...")
     test_results = tools.run_pytest(test_path)
