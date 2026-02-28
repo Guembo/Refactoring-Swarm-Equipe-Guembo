@@ -267,16 +267,13 @@ def fixer_node(state: AgentState) -> AgentState:
             status="SUCCESS"
         )
         
-        # Write the fixed code to file
-        project_root = os.path.dirname(state['target_dir'])
-        sandbox_dir = os.path.join(project_root, 'sandbox')
-        fixed_filename = f"fixed_{state['file_name']}"
-        output_path = os.path.join(sandbox_dir, fixed_filename)
+        # Write the fixed code to file, directly overwriting it
+        output_path = os.path.join(state['target_dir'], state['file_name'])
         
-        print(f"💾 Writing fixed code to sandbox/{fixed_filename}...")
+        print(f"💾 Writing fixed code to {output_path}...")
         tools.write_file(output_path, fixed_code)
         
-        # Store the sandbox path in state for judge to use
+        # Store the output path in state for judge to use
         state['fixed_file_path'] = output_path
         
         # Update state
@@ -333,111 +330,118 @@ def judge_node(state: AgentState) -> AgentState:
     print(f"⚖️ JUDGE: Validating fixes for {state['file_name']}")
     print(f"{'='*60}\n")
     
-    # Use the fixed file from sandbox if available (written by fixer)
+    # Use the fixed file from state if available (written by fixer)
     # Otherwise fall back to original location (for initial audit)
-    
     if 'fixed_file_path' in state and state['fixed_file_path']:
         file_path = state['fixed_file_path']
-        print(f"📂 Validating fixed file: sandbox/{os.path.basename(file_path)}")
+        print(f"📂 Validating fixed file: {os.path.basename(file_path)}")
     else:
         file_path = os.path.join(state['target_dir'], state['file_name'])
         print(f"📂 Validating original file: {state['file_name']}")
     
-    # Run pytest (assuming test file follows naming convention)
-    test_file_name = state['file_name'].replace('.py', '_test.py')
-    if not test_file_name.startswith('test_'):
-        test_file_name = 'test_' + state['file_name']
+    # Check if the file being analyzed is already a test file
+    is_test_file = state['file_name'].startswith('test_') or state['file_name'].endswith('_test.py')
     
-    test_path = os.path.join(state['target_dir'], test_file_name)
-    
-    # Check if test file exists
-    if not os.path.exists(test_path):
-        print(f"⚠️ Test file not found: {test_file_name}")
-        print("🤖 Generating missing unit test file...")
+    if is_test_file:
+        print(f"⚠️ {state['file_name']} is a test file. Skipping unit tests generation and execution.")
         
-        # Build prompt for Test Generator
-        test_gen_prompt = build_test_generator_input(
-            code_content=state['code_content'],
-            file_name=state['file_name']
-        )
+        state['test_results'] = "Test validation skipped (is a test file)"
+        test_results = state['test_results']
+        tests_passed = True  # Treat as passed for overall success
+    else:
+        # Run pytest (assuming test file follows naming convention)
+        test_file_name = state['file_name'].replace('.py', '_test.py')
+        if not test_file_name.startswith('test_'):
+            test_file_name = 'test_' + state['file_name']
         
-        try:
-            llm = get_llm(temperature=0.2)
-            messages = [
-                ("system", TEST_GENERATOR_PROMPT),
-                ("user", test_gen_prompt)
-            ]
-            response = llm.invoke(messages)
-            test_code = _extract_code_from_response(response.content)
+        test_path = os.path.join(state['target_dir'], test_file_name)
+        
+        # Check if test file exists
+        if not os.path.exists(test_path):
+            print(f"⚠️ Test file not found: {test_file_name}")
+            print("🤖 Generating missing unit test file...")
             
-            # Write the generated test code to the sandbox directory
-            project_root = os.path.dirname(state['target_dir'])
-            sandbox_dir = os.path.join(project_root, 'sandbox')
-            test_path = os.path.join(sandbox_dir, test_file_name)
-            
-            print(f"💾 Writing generated test code to sandbox/{test_file_name}...")
-            tools.write_file(test_path, test_code)
-            
-            # Log the test generation interaction
-            log_experiment(
-                agent_name="TestGenerator",
-                model_used="gemini-2.5-flash",
-                action=ActionType.FIX,  # Using FIX type for code generation
-                details={
-                    "input_prompt": test_gen_prompt,
-                    "output_response": response.content,
-                    "file_generated": test_file_name,
-                    "iteration": state['iteration'],
-                    "code_length": len(test_code),
-                    "note": "Automatically generated missing test file"
-                },
-                status="SUCCESS"
-            )
-            print("✅ Test generation complete\n")
-            
-        except Exception as e:
-            error_msg = f"Failed to generate or write test file: {str(e)}"
-            print(f"❌ {error_msg}")
-            
-            # Log the failure
-            log_experiment(
-                agent_name="TestGenerator",
-                model_used="gemini-2.5-flash",
-                action=ActionType.FIX,
-                details={
-                    "input_prompt": test_gen_prompt,
-                    "output_response": error_msg,
-                    "file_generated": test_file_name,
-                    "error": str(e)
-                },
-                status="FAILURE"
+            # Build prompt for Test Generator
+            test_gen_prompt = build_test_generator_input(
+                code_content=state['code_content'],
+                file_name=state['file_name']
             )
             
-            # If generation fails, we still fallback to pylint only validation
-            print("ℹ️ Falling back to pylint-only validation")
-            print(f"📊 Running pylint on {state['file_name']}...")
-            pylint_report = tools.run_pylint(file_path)
-            state['pylint_report'] = pylint_report
-            pylint_score = _extract_pylint_score(pylint_report)
-            
-            state['status'] = "SUCCESS"
-            state['test_results'] = "Test generation failed - validation skipped"
-            
-            print("✅ VERDICT: Code refactoring complete (fallback to pylint only)")
-            print(f"{'='*60}\n")
-            return state
-    
-    print(f"🧪 Running pytest on {test_file_name}...")
-    test_results = tools.run_pytest(test_path)
-    state['test_results'] = test_results
+            try:
+                llm = get_llm(temperature=0.2)
+                messages = [
+                    ("system", TEST_GENERATOR_PROMPT),
+                    ("user", test_gen_prompt)
+                ]
+                response = llm.invoke(messages)
+                test_code = _extract_code_from_response(response.content)
+                
+                # Write the generated test code to the sandbox directory
+                project_root = os.path.dirname(state['target_dir'])
+                sandbox_dir = os.path.join(project_root, 'sandbox')
+                test_path = os.path.join(sandbox_dir, test_file_name)
+                
+                print(f"💾 Writing generated test code to sandbox/{test_file_name}...")
+                tools.write_file(test_path, test_code)
+                
+                # Log the test generation interaction
+                log_experiment(
+                    agent_name="TestGenerator",
+                    model_used="gemini-2.5-flash",
+                    action=ActionType.FIX,  # Using FIX type for code generation
+                    details={
+                        "input_prompt": test_gen_prompt,
+                        "output_response": response.content,
+                        "file_generated": test_file_name,
+                        "iteration": state['iteration'],
+                        "code_length": len(test_code),
+                        "note": "Automatically generated missing test file"
+                    },
+                    status="SUCCESS"
+                )
+                print("✅ Test generation complete\n")
+                
+            except Exception as e:
+                error_msg = f"Failed to generate or write test file: {str(e)}"
+                print(f"❌ {error_msg}")
+                
+                # Log the failure
+                log_experiment(
+                    agent_name="TestGenerator",
+                    model_used="gemini-2.5-flash",
+                    action=ActionType.FIX,
+                    details={
+                        "input_prompt": test_gen_prompt,
+                        "output_response": error_msg,
+                        "file_generated": test_file_name,
+                        "error": str(e)
+                    },
+                    status="FAILURE"
+                )
+                
+                # If generation fails, we still fallback to pylint only validation
+                print("ℹ️ Falling back to pylint-only validation")
+                print(f"📊 Running pylint on {state['file_name']}...")
+                pylint_report = tools.run_pylint(file_path)
+                state['pylint_report'] = pylint_report
+                pylint_score = _extract_pylint_score(pylint_report)
+                
+                state['status'] = "SUCCESS"
+                state['test_results'] = "Test generation failed - validation skipped"
+                
+                print("✅ VERDICT: Code refactoring complete (fallback to pylint only)")
+                print(f"{'='*60}\n")
+                return state
+        
+        print(f"🧪 Running pytest on {test_file_name}...")
+        test_results = tools.run_pytest(test_path)
+        state['test_results'] = test_results
+        tests_passed = "✅ All tests passed!" in test_results or "passed" in test_results.lower()
     
     # Run pylint
     print(f"📊 Running pylint on {state['file_name']}...")
     pylint_report = tools.run_pylint(file_path)
     state['pylint_report'] = pylint_report
-    
-    # Analyze results
-    tests_passed = "✅ All tests passed!" in test_results or "passed" in test_results.lower()
     pylint_score = _extract_pylint_score(pylint_report)
     
     # Determine success (tests pass + reasonable pylint score)
