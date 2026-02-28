@@ -196,7 +196,7 @@ def main():
         
         # Run the graph
         try:
-            final_state = graph.invoke(initial_state)
+            final_state = graph.invoke(initial_state, config={"recursion_limit": 50})
             results.append({
                 "file": file_name,
                 "status": final_state["status"],

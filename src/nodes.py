@@ -436,7 +436,7 @@ def judge_node(state: AgentState) -> AgentState:
         print(f"🧪 Running pytest on {test_file_name}...")
         test_results = tools.run_pytest(test_path)
         state['test_results'] = test_results
-        tests_passed = "✅ All tests passed!" in test_results or "passed" in test_results.lower()
+        tests_passed = "✅ All tests passed!" in test_results
     
     # Run pylint
     print(f"📊 Running pylint on {state['file_name']}...")
